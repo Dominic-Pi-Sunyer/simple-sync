@@ -16,7 +16,8 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
 
 pub const SCHEME: &str = "ssync://";
-const VERSION: u8 = 1;
+/// Bumped to 2 with the sequence-numbered frame format: tickets from 1 never mix with it.
+const VERSION: u8 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SharePermission {

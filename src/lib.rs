@@ -6,13 +6,14 @@
 //! channels. Call [`SyncEngine::poll`] once per frame.
 
 pub mod crypto;
+pub mod replay;
 pub mod state;
 pub mod ticket;
 mod worker;
 
 use std::sync::atomic::Ordering;
 use std::sync::mpsc;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use anyhow::{anyhow, bail, Result};
@@ -64,6 +65,12 @@ pub enum ShareRole {
     JoinedViewOnly,
 }
 
+/// Lock a mutex, recovering the data if another thread panicked while holding it: a poisoned
+/// lock must not take the host app's UI thread down with it.
+pub(crate) fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 /// Plaintext message inside an encrypted frame. Public only so tests can forge frames.
 #[doc(hidden)]
 #[derive(Serialize, Deserialize)]
@@ -81,6 +88,14 @@ pub struct SyncEngine {
 }
 
 const REPLY_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Largest gossip frame, set on every peer's gossip instance. iroh-gossip's own default is 4 KiB,
+/// which an ink stroke, a long text or an attachment exceeds; all peers of a session must agree.
+pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
+
+/// Largest mutation `broadcast_mutation` accepts: the frame limit less the nonce, tag, signature
+/// and framing overhead.
+pub const MAX_MUTATION_BYTES: usize = MAX_FRAME_BYTES - 1024;
 
 impl SyncEngine {
     /// Initialize the background runtime. Only a thread is spawned; no socket is
@@ -198,7 +213,7 @@ impl SyncEngine {
     /// This session's ephemeral peer id (hex); empty while offline. It is the
     /// `author_peer_id` other peers see on your mutations.
     pub fn local_peer_id(&self) -> String {
-        self.shared.peer_id.lock().unwrap().clone()
+        lock(&self.shared.peer_id).clone()
     }
 
     // ---- Data plane ------------------------------------------------------------------
@@ -211,6 +226,12 @@ impl SyncEngine {
     pub fn broadcast_mutation<T: Serialize>(&self, mutation: &T) -> Result<()> {
         self.ensure_can_write()?;
         let bytes = bincode::serialize(mutation)?;
+        if bytes.len() > MAX_MUTATION_BYTES {
+            bail!(
+                "this edit is too large to share live ({} bytes; the limit is {MAX_MUTATION_BYTES})",
+                bytes.len()
+            );
+        }
         self.cmd_tx
             .send(WorkerCommand::Mutation(bytes))
             .map_err(|_| anyhow!("sync worker stopped"))

@@ -42,6 +42,8 @@ impl ShareToolbar {
     }
 
     /// `[Share Document]`
+    /// Blocks until the socket is bound (seconds). Call it from a worker thread, not the UI thread:
+    /// see `recipes/pdfcraft_hook.md`, "Starting a session without freezing the window".
     pub fn on_share(&mut self, sync: &mut SyncEngine, filename: &str, current_file_bytes: Vec<u8>) {
         match sync.enable_share_mode(filename, current_file_bytes) {
             Ok(links) => { self.links = Some(links); self.error = None; }

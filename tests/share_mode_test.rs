@@ -98,15 +98,16 @@ fn edit_vs_view_only_enforcement() {
 
     let unsigned = SignedPayload {
         author: viewer_author,
+        seq: 1,
         payload: evil_payload.clone(),
         signature: vec![0u8; 64],
     };
     let unsigned_frame = crypto::encrypt(&t.read_key, &bincode::serialize(&unsigned).unwrap()).unwrap();
     let self_signed = {
         let own = SigningKey::from_bytes(&crypto::random_key());
-        crypto::seal(&t.read_key, Some(&own), viewer_author, &evil_payload).unwrap()
+        crypto::seal(&t.read_key, Some(&own), viewer_author, 1, &evil_payload).unwrap()
     };
-    assert!(crypto::seal(&t.read_key, None, viewer_author, &evil_payload).is_err());
+    assert!(crypto::seal(&t.read_key, None, viewer_author, 1, &evil_payload).is_err());
     for frame in [&unsigned_frame, &self_signed] {
         assert!(crypto::open(&t.read_key, &vk, frame).is_err());
     }

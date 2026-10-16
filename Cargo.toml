@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 description = "Zero-server P2P document and state synchronization for agent-built apps."
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/Dominic-Pi-Sunyer/simple-sync"
+readme = "README.md"
+keywords = ["p2p", "sync", "collaboration", "e2ee", "iroh"]
+categories = ["network-programming", "cryptography"]
 
 [dependencies]
 # Networking & Blobs (latest releases at time of writing; iroh 1.x line)
