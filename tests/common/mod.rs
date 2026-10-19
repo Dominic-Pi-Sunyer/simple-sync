@@ -38,13 +38,19 @@ impl Peer {
             if let Some(i) = self.backlog.iter().position(|e| pred(e)) {
                 return self.backlog.remove(i);
             }
-            assert!(Instant::now() < deadline, "timed out waiting for {what}; backlog: {:?}", self.backlog);
+            assert!(
+                Instant::now() < deadline,
+                "timed out waiting for {what}; backlog: {:?}",
+                self.backlog
+            );
             std::thread::sleep(Duration::from_millis(10));
         }
     }
 
     pub fn wait_base(&mut self) -> (String, Vec<u8>) {
-        match self.wait("BaseDocumentReady", |e| matches!(e, SyncEvent::BaseDocumentReady { .. })) {
+        match self.wait("BaseDocumentReady", |e| {
+            matches!(e, SyncEvent::BaseDocumentReady { .. })
+        }) {
             SyncEvent::BaseDocumentReady { filename, bytes } => (filename, bytes),
             _ => unreachable!(),
         }
@@ -52,13 +58,18 @@ impl Peer {
 
     pub fn wait_mutation(&mut self, what: &str) -> (String, Vec<u8>) {
         match self.wait(what, |e| matches!(e, SyncEvent::RemoteMutation { .. })) {
-            SyncEvent::RemoteMutation { author_peer_id, mutation_bytes } => (author_peer_id, mutation_bytes),
+            SyncEvent::RemoteMutation {
+                author_peer_id,
+                mutation_bytes,
+            } => (author_peer_id, mutation_bytes),
             _ => unreachable!(),
         }
     }
 
     pub fn wait_peers(&self, n: usize) {
-        wait_until(&format!("{n} connected peer(s)"), || self.engine.connected_peers_count() == n);
+        wait_until(&format!("{n} connected peer(s)"), || {
+            self.engine.connected_peers_count() == n
+        });
     }
 
     /// Collect events for `dur`, then report every RemoteMutation seen (consumed).

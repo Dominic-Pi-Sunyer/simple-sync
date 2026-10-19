@@ -63,7 +63,10 @@ mod tests {
         let mut g = ReplayGuard::new();
         assert!(g.accept([1; 32], 5));
         assert!(!g.accept([1; 32], 5), "a replay of the same frame");
-        assert!(g.accept([2; 32], 5), "another author's frame with the same seq");
+        assert!(
+            g.accept([2; 32], 5),
+            "another author's frame with the same seq"
+        );
     }
 
     #[test]
@@ -99,6 +102,9 @@ mod tests {
         extra[0] = 200;
         extra[1] = 200;
         assert!(!g.accept(extra, 1), "authors beyond the cap are refused");
-        assert!(g.accept([1; 32], u64::MAX - 1), "known authors keep working");
+        assert!(
+            g.accept([1; 32], u64::MAX - 1),
+            "known authors keep working"
+        );
     }
 }

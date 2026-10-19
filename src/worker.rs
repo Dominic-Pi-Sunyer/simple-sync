@@ -58,7 +58,10 @@ pub struct SyncConfig {
 
 impl SyncConfig {
     pub fn local_only() -> Self {
-        Self { local_only: true, port_mapping: false }
+        Self {
+            local_only: true,
+            port_mapping: false,
+        }
     }
 }
 
@@ -206,13 +209,22 @@ impl Worker {
         evt_tx: mpsc::UnboundedSender<SyncEvent>,
         shared: Arc<Shared>,
     ) -> Self {
-        Self { cfg, evt_tx, shared, session: None }
+        Self {
+            cfg,
+            evt_tx,
+            shared,
+            session: None,
+        }
     }
 
     pub(crate) async fn run(mut self, mut cmd_rx: mpsc::UnboundedReceiver<WorkerCommand>) {
         while let Some(cmd) = cmd_rx.recv().await {
             match cmd {
-                WorkerCommand::Enable { filename, bytes, reply } => {
+                WorkerCommand::Enable {
+                    filename,
+                    bytes,
+                    reply,
+                } => {
                     let _ = reply.send(self.enable(filename, bytes).await);
                 }
                 WorkerCommand::Disable { reply } => {
@@ -344,12 +356,18 @@ impl Worker {
         let endpoint = self.bind(secret.clone(), None).await?;
 
         let store = MemStore::new();
-        let tag = store.blobs().add_bytes(Bytes::from(bytes)).await.map_err(ae)?;
+        let tag = store
+            .blobs()
+            .add_bytes(Bytes::from(bytes))
+            .await
+            .map_err(ae)?;
         if tag.hash.as_bytes() != b3.as_bytes() {
             bail!("blob store hash does not match BLAKE3 of the base file");
         }
         let blobs = BlobsProtocol::new(&store, None);
-        let gossip = Gossip::builder().max_message_size(crate::MAX_FRAME_BYTES).spawn(endpoint.clone());
+        let gossip = Gossip::builder()
+            .max_message_size(crate::MAX_FRAME_BYTES)
+            .spawn(endpoint.clone());
         let router = Router::builder(endpoint.clone())
             .accept(iroh_blobs::ALPN, blobs)
             .accept(GOSSIP_ALPN, gossip.clone())
@@ -360,10 +378,17 @@ impl Worker {
             let _ = tokio::time::timeout(ONLINE_TIMEOUT, endpoint.online()).await;
         }
         let addr = endpoint.addr();
-        let mut ips: Vec<SocketAddr> =
-            addr.ip_addrs().copied().filter(|a| !a.ip().is_unspecified()).collect();
+        let mut ips: Vec<SocketAddr> = addr
+            .ip_addrs()
+            .copied()
+            .filter(|a| !a.ip().is_unspecified())
+            .collect();
         if ips.is_empty() {
-            ips = endpoint.bound_sockets().into_iter().filter(|a| !a.ip().is_unspecified()).collect();
+            ips = endpoint
+                .bound_sockets()
+                .into_iter()
+                .filter(|a| !a.ip().is_unspecified())
+                .collect();
         }
         let mut host_addr = EndpointAddr::new(endpoint.id());
         for ip in ips {
@@ -385,13 +410,26 @@ impl Worker {
         let (_ready_tx, ready_rx) = watch::channel(true);
         let seq = Arc::new(AtomicU64::new(1));
         let log = Some(Arc::new(Mutex::new(MutationLog::default())));
-        let recv = self.start_recv(receiver, &keys, author, &seq, &log, &sender, &crdt, ready_rx);
+        let recv = self.start_recv(
+            receiver, &keys, author, &seq, &log, &sender, &crdt, ready_rx,
+        );
 
         *lock(&self.shared.peer_id) = secret.public().to_string();
         self.shared.peers.store(0, Ordering::Relaxed);
-        self.session =
-            Some(Session { router, sender, keys, author, seq, log, crdt, tasks: vec![recv] });
-        Ok(ShareLinks { edit_uri: ticket.to_edit_uri(), view_only_uri: ticket.to_view_only_uri() })
+        self.session = Some(Session {
+            router,
+            sender,
+            keys,
+            author,
+            seq,
+            log,
+            crdt,
+            tasks: vec![recv],
+        });
+        Ok(ShareLinks {
+            edit_uri: ticket.to_edit_uri(),
+            view_only_uri: ticket.to_view_only_uri(),
+        })
     }
 
     async fn join(&mut self, t: SessionTicket) -> Result<()> {
@@ -405,7 +443,9 @@ impl Worker {
         let secret = SecretKey::generate();
         let endpoint = self.bind(secret.clone(), Some(lookup)).await?;
 
-        let gossip = Gossip::builder().max_message_size(crate::MAX_FRAME_BYTES).spawn(endpoint.clone());
+        let gossip = Gossip::builder()
+            .max_message_size(crate::MAX_FRAME_BYTES)
+            .spawn(endpoint.clone());
         let router = Router::builder(endpoint.clone())
             .accept(GOSSIP_ALPN, gossip.clone())
             .spawn();
@@ -419,7 +459,9 @@ impl Worker {
         let author = *secret.public().as_bytes();
         let (ready_tx, ready_rx) = watch::channel(false);
         let seq = Arc::new(AtomicU64::new(1));
-        let recv = self.start_recv(receiver, &keys, author, &seq, &None, &sender, &crdt, ready_rx);
+        let recv = self.start_recv(
+            receiver, &keys, author, &seq, &None, &sender, &crdt, ready_rx,
+        );
 
         // Fetch the base file; iroh-blobs verifies the BLAKE3 tree while streaming.
         let evt_tx = self.evt_tx.clone();
@@ -447,11 +489,16 @@ impl Worker {
             .await;
             match res {
                 Ok(bytes) => {
-                    let _ = evt_tx.send(SyncEvent::BaseDocumentReady { filename, bytes: bytes.to_vec() });
+                    let _ = evt_tx.send(SyncEvent::BaseDocumentReady {
+                        filename,
+                        bytes: bytes.to_vec(),
+                    });
                     let _ = ready_tx.send(true);
                 }
                 Err(e) => {
-                    let _ = evt_tx.send(SyncEvent::Error(format!("base file download failed: {e:#}")));
+                    let _ = evt_tx.send(SyncEvent::Error(format!(
+                        "base file download failed: {e:#}"
+                    )));
                 }
             }
         });
@@ -482,7 +529,10 @@ async fn send_wire(
 ) -> Result<Vec<u8>> {
     let n = seq.fetch_add(1, Ordering::Relaxed);
     let frame = keys.seal(author, n, &bincode::serialize(wire)?)?;
-    sender.broadcast(Bytes::from(frame.clone())).await.map_err(ae)?;
+    sender
+        .broadcast(Bytes::from(frame.clone()))
+        .await
+        .map_err(ae)?;
     Ok(frame)
 }
 
@@ -506,7 +556,9 @@ impl RecvCtx {
 
     fn on_message(&self, content: &[u8]) {
         // Undecryptable or unauthorized frames are dropped silently.
-        let Ok((from, seq, data)) = self.keys.open(content) else { return };
+        let Ok((from, seq, data)) = self.keys.open(content) else {
+            return;
+        };
         if from == self.author {
             return;
         }
@@ -526,7 +578,10 @@ impl RecvCtx {
                         ));
                     }
                 }
-                self.emit(SyncEvent::RemoteMutation { author_peer_id, mutation_bytes })
+                self.emit(SyncEvent::RemoteMutation {
+                    author_peer_id,
+                    mutation_bytes,
+                })
             }
             Ok(Wire::Crdt(bytes)) => {
                 let merged = {
@@ -548,11 +603,21 @@ impl RecvCtx {
         }
         let snapshot = {
             let c = lock(&self.crdt);
-            if c.is_empty() { None } else { c.snapshot().ok() }
+            if c.is_empty() {
+                None
+            } else {
+                c.snapshot().ok()
+            }
         };
         if let Some(s) = snapshot {
-            if let Err(e) =
-                send_wire(&self.sender, &self.keys, self.author, &self.seq, &Wire::Crdt(s)).await
+            if let Err(e) = send_wire(
+                &self.sender,
+                &self.keys,
+                self.author,
+                &self.seq,
+                &Wire::Crdt(s),
+            )
+            .await
             {
                 self.emit(SyncEvent::Error(format!("{e:#}")));
             }

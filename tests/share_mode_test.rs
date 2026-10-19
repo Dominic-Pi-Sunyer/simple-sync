@@ -10,7 +10,10 @@ use simple_sync::crypto::{self, SignedPayload};
 use simple_sync::{SessionTicket, SharePermission, ShareRole, SyncEvent, Wire};
 
 fn edit(text: &str) -> EditAction {
-    EditAction::Annotate { page: 1, text: text.into() }
+    EditAction::Annotate {
+        page: 1,
+        text: text.into(),
+    }
 }
 
 fn decode(bytes: &[u8]) -> EditAction {
@@ -21,7 +24,10 @@ fn decode(bytes: &[u8]) -> EditAction {
 fn ticket_roundtrip() {
     let mut host = Peer::new();
     let pdf = fake_pdf();
-    let links = host.engine.enable_share_mode("contract.pdf", pdf.clone()).unwrap();
+    let links = host
+        .engine
+        .enable_share_mode("contract.pdf", pdf.clone())
+        .unwrap();
     assert_eq!(host.engine.role(), ShareRole::Hosting);
 
     let edit_t = SessionTicket::from_uri(&links.edit_uri).unwrap();
@@ -39,7 +45,10 @@ fn ticket_roundtrip() {
     assert_eq!(edit_t.write_verifying_key, view_t.write_verifying_key);
     assert_eq!(edit_t.doc_hash, *blake3::hash(&pdf).as_bytes());
     assert_eq!(edit_t.filename, "contract.pdf");
-    assert!(edit_t.host_addr.ip_addrs().next().is_some(), "host must be dialable");
+    assert!(
+        edit_t.host_addr.ip_addrs().next().is_some(),
+        "host must be dialable"
+    );
 
     // Re-serializing yields identical links.
     assert_eq!(edit_t.to_edit_uri(), links.edit_uri);
@@ -54,9 +63,18 @@ fn edit_vs_view_only_enforcement() {
     let mut viewer = Peer::new();
     let pdf = fake_pdf();
 
-    let links = host.engine.enable_share_mode("contract.pdf", pdf.clone()).unwrap();
-    assert_eq!(editor.engine.join_via_ticket(&links.edit_uri).unwrap(), ShareRole::JoinedCanEdit);
-    assert_eq!(viewer.engine.join_via_ticket(&links.view_only_uri).unwrap(), ShareRole::JoinedViewOnly);
+    let links = host
+        .engine
+        .enable_share_mode("contract.pdf", pdf.clone())
+        .unwrap();
+    assert_eq!(
+        editor.engine.join_via_ticket(&links.edit_uri).unwrap(),
+        ShareRole::JoinedCanEdit
+    );
+    assert_eq!(
+        viewer.engine.join_via_ticket(&links.view_only_uri).unwrap(),
+        ShareRole::JoinedViewOnly
+    );
     assert_eq!(editor.engine.role(), ShareRole::JoinedCanEdit);
     assert_eq!(viewer.engine.role(), ShareRole::JoinedViewOnly);
 
@@ -82,7 +100,10 @@ fn edit_vs_view_only_enforcement() {
     // Host can write too, and the editor sees it.
     let m_host = edit("from host");
     host.engine.broadcast_mutation(&m_host).unwrap();
-    assert_eq!(decode(&editor.wait_mutation("host mutation at editor").1), m_host);
+    assert_eq!(
+        decode(&editor.wait_mutation("host mutation at editor").1),
+        m_host
+    );
     viewer.wait_mutation("host mutation at viewer");
 
     // Viewer is blocked locally, before the network...
@@ -93,7 +114,10 @@ fn edit_vs_view_only_enforcement() {
     // ...and frames it forges are rejected by crypto.rs.
     let t = SessionTicket::from_uri(&links.view_only_uri).unwrap();
     let vk = ed25519_dalek::VerifyingKey::from_bytes(&t.write_verifying_key).unwrap();
-    let evil_payload = bincode::serialize(&Wire::Mutation(bincode::serialize(&edit("FORGED")).unwrap())).unwrap();
+    let evil_payload = bincode::serialize(&Wire::Mutation(
+        bincode::serialize(&edit("FORGED")).unwrap(),
+    ))
+    .unwrap();
     let viewer_author = [3u8; 32];
 
     let unsigned = SignedPayload {
@@ -102,7 +126,8 @@ fn edit_vs_view_only_enforcement() {
         payload: evil_payload.clone(),
         signature: vec![0u8; 64],
     };
-    let unsigned_frame = crypto::encrypt(&t.read_key, &bincode::serialize(&unsigned).unwrap()).unwrap();
+    let unsigned_frame =
+        crypto::encrypt(&t.read_key, &bincode::serialize(&unsigned).unwrap()).unwrap();
     let self_signed = {
         let own = SigningKey::from_bytes(&crypto::random_key());
         crypto::seal(&t.read_key, Some(&own), viewer_author, 1, &evil_payload).unwrap()
@@ -117,17 +142,25 @@ fn edit_vs_view_only_enforcement() {
     editor.drain();
     viewer.engine.__inject_raw_frame(unsigned_frame);
     viewer.engine.__inject_raw_frame(self_signed);
-    viewer.engine.__inject_raw_frame(b"garbage that is not even a frame".to_vec());
+    viewer
+        .engine
+        .__inject_raw_frame(b"garbage that is not even a frame".to_vec());
     let m2 = edit("legit after forgery");
     editor.engine.broadcast_mutation(&m2).unwrap();
     assert_eq!(decode(&host.wait_mutation("legit mutation").1), m2);
     let extra_host = host.mutations_within(Duration::from_millis(800));
     let extra_editor = editor.mutations_within(Duration::from_millis(100));
-    assert!(extra_host.is_empty() && extra_editor.is_empty(), "forged frame was delivered");
+    assert!(
+        extra_host.is_empty() && extra_editor.is_empty(),
+        "forged frame was delivered"
+    );
 
     // No error events either: forged frames are dropped silently.
     for p in [&mut host, &mut editor] {
-        assert!(!p.seen(|e| matches!(e, SyncEvent::Error(_))), "forged frames must be dropped silently");
+        assert!(
+            !p.seen(|e| matches!(e, SyncEvent::Error(_))),
+            "forged frames must be dropped silently"
+        );
     }
 }
 
@@ -137,7 +170,10 @@ fn kill_switch_revokes_old_links() {
     let mut editor = Peer::new();
     let pdf = fake_pdf();
 
-    let links1 = host.engine.enable_share_mode("contract.pdf", pdf.clone()).unwrap();
+    let links1 = host
+        .engine
+        .enable_share_mode("contract.pdf", pdf.clone())
+        .unwrap();
     editor.engine.join_via_ticket(&links1.edit_uri).unwrap();
     assert_eq!(editor.wait_base().1, pdf);
     host.wait_peers(1);
@@ -157,10 +193,15 @@ fn kill_switch_revokes_old_links() {
     host.engine.disable_share_mode().unwrap();
 
     // The old subscriber notices the host is gone.
-    wait_until("editor to lose its only neighbor", || editor.engine.connected_peers_count() == 0);
+    wait_until("editor to lose its only neighbor", || {
+        editor.engine.connected_peers_count() == 0
+    });
 
     // --- Re-enable: entirely new keys, topic and node identity ---
-    let links2 = host.engine.enable_share_mode("contract.pdf", pdf.clone()).unwrap();
+    let links2 = host
+        .engine
+        .enable_share_mode("contract.pdf", pdf.clone())
+        .unwrap();
     assert_ne!(links2.edit_uri, links1.edit_uri);
     assert_ne!(links2.view_only_uri, links1.view_only_uri);
     let (t1, t2) = (
@@ -177,12 +218,23 @@ fn kill_switch_revokes_old_links() {
     // The old editor keeps broadcasting on the old session; the new session never sees it.
     host.drain();
     editor.drain();
-    editor.engine.broadcast_mutation(&edit("after kill, old link")).unwrap();
-    assert!(host.mutations_within(Duration::from_secs(2)).is_empty(), "old link still reaches new session");
+    editor
+        .engine
+        .broadcast_mutation(&edit("after kill, old link"))
+        .unwrap();
+    assert!(
+        host.mutations_within(Duration::from_secs(2)).is_empty(),
+        "old link still reaches new session"
+    );
 
     // And nothing from the new session reaches the old editor.
-    host.engine.broadcast_mutation(&edit("new session only")).unwrap();
-    assert!(editor.mutations_within(Duration::from_secs(1)).is_empty(), "new session leaked to old link");
+    host.engine
+        .broadcast_mutation(&edit("new session only"))
+        .unwrap();
+    assert!(
+        editor.mutations_within(Duration::from_secs(1)).is_empty(),
+        "new session leaked to old link"
+    );
 
     // A fresh peer using the old link cannot fetch the document...
     let mut intruder = Peer::new();
@@ -196,7 +248,10 @@ fn kill_switch_revokes_old_links() {
 
     // ...while the new link works.
     let mut newcomer = Peer::new();
-    assert_eq!(newcomer.engine.join_via_ticket(&links2.edit_uri).unwrap(), ShareRole::JoinedCanEdit);
+    assert_eq!(
+        newcomer.engine.join_via_ticket(&links2.edit_uri).unwrap(),
+        ShareRole::JoinedCanEdit
+    );
     assert_eq!(newcomer.wait_base().1, pdf);
     host.wait_peers(1);
 }
@@ -205,12 +260,24 @@ fn kill_switch_revokes_old_links() {
 fn joiner_can_leave_and_rejoin_roles_reset() {
     let mut host = Peer::new();
     let mut viewer = Peer::new();
-    let links = host.engine.enable_share_mode("a.pdf", b"%PDF tiny".to_vec()).unwrap();
-    assert!(host.engine.enable_share_mode("a.pdf", vec![]).is_err(), "double enable");
+    let links = host
+        .engine
+        .enable_share_mode("a.pdf", b"%PDF tiny".to_vec())
+        .unwrap();
+    assert!(
+        host.engine.enable_share_mode("a.pdf", vec![]).is_err(),
+        "double enable"
+    );
     viewer.engine.join_via_ticket(&links.view_only_uri).unwrap();
-    assert!(viewer.engine.join_via_ticket(&links.edit_uri).is_err(), "double join");
+    assert!(
+        viewer.engine.join_via_ticket(&links.edit_uri).is_err(),
+        "double join"
+    );
     viewer.wait_base();
     viewer.engine.disable_share_mode().unwrap();
     assert_eq!(viewer.engine.role(), ShareRole::Offline);
-    assert_eq!(viewer.engine.join_via_ticket(&links.edit_uri).unwrap(), ShareRole::JoinedCanEdit);
+    assert_eq!(
+        viewer.engine.join_via_ticket(&links.edit_uri).unwrap(),
+        ShareRole::JoinedCanEdit
+    );
 }

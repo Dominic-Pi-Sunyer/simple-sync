@@ -197,7 +197,9 @@ mod tests {
         let t = sample();
         let sk = t.write_signing_key.unwrap();
         let view = t.to_view_only_uri();
-        let raw = BASE64URL_NOPAD.decode(view.trim_start_matches(SCHEME).as_bytes()).unwrap();
+        let raw = BASE64URL_NOPAD
+            .decode(view.trim_start_matches(SCHEME).as_bytes())
+            .unwrap();
         assert!(!raw.windows(32).any(|w| w == sk));
         assert!(view.len() < t.to_edit_uri().len());
     }
@@ -205,7 +207,9 @@ mod tests {
     #[test]
     fn uris_are_url_safe() {
         let u = sample().to_edit_uri();
-        assert!(u[SCHEME.len()..].chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
+        assert!(u[SCHEME.len()..]
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
     }
 
     #[test]

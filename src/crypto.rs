@@ -71,7 +71,10 @@ pub fn encrypt(read_key: &[u8; 32], plaintext: &[u8]) -> Result<Vec<u8>> {
     let ciphertext = ChaCha20Poly1305::new(Key::from_slice(read_key))
         .encrypt(Nonce::from_slice(&nonce), plaintext)
         .map_err(|_| anyhow!("encryption failed"))?;
-    Ok(bincode::serialize(&SignedEncryptedFrame { nonce, ciphertext })?)
+    Ok(bincode::serialize(&SignedEncryptedFrame {
+        nonce,
+        ciphertext,
+    })?)
 }
 
 /// Inverse of [`encrypt`]; fails if tampered or the key is wrong.
@@ -92,8 +95,16 @@ pub fn seal(
     payload: &[u8],
 ) -> Result<Vec<u8>> {
     let sk = signing_key.ok_or_else(|| anyhow!("Session is View-Only"))?;
-    let signature = sk.sign(&signed_message(&author, seq, payload)).to_bytes().to_vec();
-    let inner = SignedPayload { author, seq, payload: payload.to_vec(), signature };
+    let signature = sk
+        .sign(&signed_message(&author, seq, payload))
+        .to_bytes()
+        .to_vec();
+    let inner = SignedPayload {
+        author,
+        seq,
+        payload: payload.to_vec(),
+        signature,
+    };
     encrypt(read_key, &bincode::serialize(&inner)?)
 }
 
@@ -110,7 +121,10 @@ pub fn open(
         Err(_) => bail!("bad signature length"),
     };
     verifying_key
-        .verify(&signed_message(&inner.author, inner.seq, &inner.payload), &Signature::from_bytes(&sig))
+        .verify(
+            &signed_message(&inner.author, inner.seq, &inner.payload),
+            &Signature::from_bytes(&sig),
+        )
         .map_err(|_| anyhow!("write signature verification failed"))?;
     Ok((inner.author, inner.seq, inner.payload))
 }
@@ -170,7 +184,12 @@ mod tests {
         assert!(open(&rk, &vk, &wrong_signer).is_err());
 
         // Unsigned / garbage signature, correctly encrypted with the read key.
-        let unsigned = SignedPayload { author: [1; 32], seq: 1, payload: b"evil".to_vec(), signature: vec![0; 64] };
+        let unsigned = SignedPayload {
+            author: [1; 32],
+            seq: 1,
+            payload: b"evil".to_vec(),
+            signature: vec![0; 64],
+        };
         let f = encrypt(&rk, &bincode::serialize(&unsigned).unwrap()).unwrap();
         assert!(open(&rk, &vk, &f).is_err());
 
@@ -179,7 +198,10 @@ mod tests {
             author: [1; 32],
             seq: 1,
             payload: b"evil".to_vec(),
-            signature: sk.sign(&signed_message(&[1; 32], 1, b"good")).to_bytes().to_vec(),
+            signature: sk
+                .sign(&signed_message(&[1; 32], 1, b"good"))
+                .to_bytes()
+                .to_vec(),
         };
         let f = encrypt(&rk, &bincode::serialize(&good).unwrap()).unwrap();
         assert!(open(&rk, &vk, &f).is_err());
@@ -189,7 +211,10 @@ mod tests {
             author: [1; 32],
             seq: 2,
             payload: b"good".to_vec(),
-            signature: sk.sign(&signed_message(&[1; 32], 1, b"good")).to_bytes().to_vec(),
+            signature: sk
+                .sign(&signed_message(&[1; 32], 1, b"good"))
+                .to_bytes()
+                .to_vec(),
         };
         let f = encrypt(&rk, &bincode::serialize(&one).unwrap()).unwrap();
         assert!(open(&rk, &vk, &f).is_err());

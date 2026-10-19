@@ -20,7 +20,9 @@ impl Default for CrdtState {
 
 impl CrdtState {
     pub fn new() -> Self {
-        Self { doc: LoroDoc::new() }
+        Self {
+            doc: LoroDoc::new(),
+        }
     }
 
     /// Set `key = value` in the shared map; returns the delta to broadcast.

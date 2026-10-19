@@ -29,14 +29,26 @@ use worker::{Shared, Worker, WorkerCommand};
 pub enum SyncEvent {
     /// Fired on the joiner's machine once the base file (e.g. raw PDF bytes) is
     /// downloaded and verified against the ticket's BLAKE3 hash.
-    BaseDocumentReady { filename: String, bytes: Vec<u8> },
+    BaseDocumentReady {
+        filename: String,
+        bytes: Vec<u8>,
+    },
     /// A remote writer broadcast a mutation. `mutation_bytes` is the `bincode`
     /// encoding of what they passed to [`SyncEngine::broadcast_mutation`].
-    RemoteMutation { author_peer_id: String, mutation_bytes: Vec<u8> },
+    RemoteMutation {
+        author_peer_id: String,
+        mutation_bytes: Vec<u8>,
+    },
     /// A *remote* Loro CRDT delta/snapshot was merged.
-    CrdtUpdated { json_state: String },
-    PeerJoined { peer_id: String },
-    PeerLeft { peer_id: String },
+    CrdtUpdated {
+        json_state: String,
+    },
+    PeerJoined {
+        peer_id: String,
+    },
+    PeerLeft {
+        peer_id: String,
+    },
     Error(String),
 }
 
@@ -123,16 +135,21 @@ impl SyncEngine {
                 };
                 rt.block_on(worker.run(cmd_rx));
             })?;
-        Ok(Self { cmd_tx, event_rx, shared, role: ShareRole::Offline })
+        Ok(Self {
+            cmd_tx,
+            event_rx,
+            shared,
+            role: ShareRole::Offline,
+        })
     }
 
-    fn request<T>(
-        &self,
-        make: impl FnOnce(mpsc::Sender<Result<T>>) -> WorkerCommand,
-    ) -> Result<T> {
+    fn request<T>(&self, make: impl FnOnce(mpsc::Sender<Result<T>>) -> WorkerCommand) -> Result<T> {
         let (reply, rx) = mpsc::channel();
-        self.cmd_tx.send(make(reply)).map_err(|_| anyhow!("sync worker stopped"))?;
-        rx.recv_timeout(REPLY_TIMEOUT).map_err(|_| anyhow!("sync worker did not respond"))?
+        self.cmd_tx
+            .send(make(reply))
+            .map_err(|_| anyhow!("sync worker stopped"))?;
+        rx.recv_timeout(REPLY_TIMEOUT)
+            .map_err(|_| anyhow!("sync worker did not respond"))?
     }
 
     // ---- Share Mode lifecycle -------------------------------------------------
@@ -241,7 +258,10 @@ impl SyncEngine {
     pub fn set_shared(&self, key: &str, value: &str) -> Result<()> {
         self.ensure_can_write()?;
         self.cmd_tx
-            .send(WorkerCommand::CrdtSet { key: key.to_string(), value: value.to_string() })
+            .send(WorkerCommand::CrdtSet {
+                key: key.to_string(),
+                value: value.to_string(),
+            })
             .map_err(|_| anyhow!("sync worker stopped"))
     }
 
